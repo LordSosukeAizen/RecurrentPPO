@@ -62,9 +62,9 @@ def test():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     env = StockEnv(
-        ticker="TSLA",
-        start_date="2024-01-01",
-        end_date="2025-01-01",
+        ticker="GOOGL",
+        start_date="2025-03-01",
+        end_date="2025-06-01",
         render_mode="human",  # set None for headless
     )
 

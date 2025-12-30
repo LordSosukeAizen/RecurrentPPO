@@ -5,8 +5,13 @@ from torch.distributions import Categorical
 from rppo import RNNPolicy, DVN
 from stockenv import StockEnv
 
+import time
+
 RPOPATH = "recurrent_po.pth"
 VALUEPATH = "value.pth"
+
+DEBUG = False
+SLEEP_DEBUG_TIME = 20
 
 @dataclass
 class RolloutBuffer:
@@ -34,12 +39,19 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
     gae = 0.0
 
     for t in reversed(range(T)):
-        not_done = 1.0 - dones[t].float()
+        not_done = 1.0 - dones[t].float() 
         delta = rewards[t] + gamma * values[t + 1] * not_done - values[t]
         gae = delta + gamma * lam * not_done * gae
         advantages[t] = gae[-1]
+        
+    returns = advantages + values[:-1].squeeze(-1)
+    
+    if DEBUG:
+        print('Values: ', values[:-1].squeeze(-1).shape)
+        print('Advantage: ', advantages.shape)
 
-    returns = advantages + values[:-1]
+    
+ 
     return advantages, returns
 
 
@@ -55,6 +67,9 @@ def collect_rollout(env, policy_net, value_net, rollout_len, device):
         policy_net.num_layers, 1, policy_net.hidden_dim, device=device
     )
 
+    if DEBUG:
+        print('sequence length: ', rollout_len)
+    
     for _ in range(rollout_len):
         obs_seq = obs.view(1, 1, -1)  # (T=1, B=1, obs_dim)
 
@@ -64,7 +79,10 @@ def collect_rollout(env, policy_net, value_net, rollout_len, device):
         dist = Categorical(probs)
         action = dist.sample()
 
-        value = value_net(h.squeeze(0)).squeeze(-1)
+        value = value_net(h[-1]).squeeze(-1)
+        
+        if DEBUG:
+            print('value shape: ', value.shape)
 
         next_obs, reward, done, _, _ = env.step(action.item())
 
@@ -83,7 +101,7 @@ def collect_rollout(env, policy_net, value_net, rollout_len, device):
             break
 
     with torch.no_grad():
-        last_value = value_net(h.squeeze(0)).squeeze(-1)
+        last_value = value_net(h[-1]).squeeze(-1)
 
     buffer.values.append(last_value)
     return buffer
@@ -105,13 +123,18 @@ def ppo_update(
 
     advantages, returns = compute_gae(rewards, values, dones)
     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-
+    returns = returns.unsqueeze(-1)
+    
     policy_loss = 0.0
     value_loss = 0.0
     entropy_loss = 0.0
 
     T = len(actions)
+    if DEBUG:
+        print('return shape: ', returns.shape)
 
+
+    
     for t in range(T):
         obs = buffer.obs[t].view(1, 1, -1)
         h = buffer.hiddens[t]
@@ -131,7 +154,10 @@ def ppo_update(
         policy_loss += -torch.min(surr1, surr2)
         entropy_loss += entropy
 
-        value_pred = value_net(h.squeeze(0)).squeeze(-1)
+        value_pred = value_net(h[-1]).squeeze(-1)
+        if DEBUG:
+            print("returns: ", returns[t], " value pred: ", value_pred)
+            time.sleep(SLEEP_DEBUG_TIME)
         value_loss += F.mse_loss(value_pred, returns[t])
 
     loss = (
@@ -147,52 +173,67 @@ def ppo_update(
     )
     optimizer.step()
 
-def train(num_episodes=500, save=False):
+def train(stock_tickers: list[str], num_episodes=500, save=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    env = StockEnv(
-        ticker="AAPL",
-        start_date="2022-01-01",
-        end_date="2023-01-01",
-        render_mode=None,
-    )
-
     policy_net = RNNPolicy(
-        input_dim=2,
-        hidden_dim=64,
-        num_actions=3,
-        num_layers=2,
-    ).to(device)
+            input_dim=2,
+            hidden_dim=64,
+            num_actions=3,
+            num_layers=2,
+        ).to(device)
 
     value_net = DVN(hidden_dim=64).to(device)
 
     optimizer = torch.optim.Adam(
-        list(policy_net.parameters()) + list(value_net.parameters()),
-        lr=3e-4,
-    )
-
-    for epoch in range(num_episodes):
-        buffer = collect_rollout(
-            env,
-            policy_net,
-            value_net,
-            rollout_len=64,
-            device=device,
+            list(policy_net.parameters()) + list(value_net.parameters()),
+            lr=3e-4,
         )
 
-        ppo_update(
-            policy_net,
-            value_net,
-            optimizer,
-            buffer,
+    for stock_ticker in stock_tickers:
+        print(f'Training on {stock_ticker}')
+        
+        env = StockEnv(
+            ticker=stock_ticker,
+            start_date="2020-01-01",
+            end_date="2025-01-01",
+            render_mode=None,
         )
 
-        avg_reward = torch.stack(buffer.rewards).mean().item()
-        print(f"Epoch {epoch:04d} | Avg reward: {avg_reward:.4f}")
+        for epoch in range(num_episodes):
+            buffer = collect_rollout(
+                env,
+                policy_net,
+                value_net,
+                rollout_len=64,
+                device=device,
+            )
+
+            ppo_update(
+                policy_net,
+                value_net,
+                optimizer,
+                buffer,
+            )
+
+            avg_reward = torch.stack(buffer.rewards).mean().item()
+            print(f"Epoch {epoch:04d} | Avg reward: {avg_reward:.4f}")
         
     if save:
         torch.save(policy_net.state_dict(), RPOPATH)
         torch.save(value_net.state_dict(), VALUEPATH)
 
 if __name__ == "__main__":
-    train(num_episodes=1000, save=True)
+    
+    stock_tickers = [
+        'AAPL',
+        'NVDA',
+        'MSFT',
+        'TSLA',
+        'CETX',
+        'BNAI',
+        'COKE'
+    ]
+    
+  
+    train(stock_tickers=stock_tickers, num_episodes=1000, save=True)
