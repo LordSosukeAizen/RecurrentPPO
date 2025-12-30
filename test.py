@@ -57,32 +57,41 @@ def run_episode(env, policy_net, device, render=False):
 
     return total_reward, step
 
-def test():
+def test(stock_tickers):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    env = StockEnv(
-        ticker="GOOGL",
-        start_date="2025-03-01",
-        end_date="2025-06-01",
-        render_mode="human",  # set None for headless
-    )
+    for stock_ticker in stock_tickers:
+        
+        env = StockEnv(
+            ticker=stock_ticker,
+            start_date="2025-01-01",
+            end_date="2025-06-01",
+            render_mode="human",  # set None for headless
+        )
 
-    policy_net, _ = load_model(
-        device=device
-    )
+        policy_net, _ = load_model(
+            device=device
+        )
 
-    total_reward, steps = run_episode(
-        env,
-        policy_net,
-        device,
-        render=True,
-    )
+        total_reward, steps = run_episode(
+            env,
+            policy_net,
+            device,
+            render=True,
+        )
 
-    print(f"Test episode finished")
-    print(f"Steps taken: {steps}")
-    print(f"Total reward: {total_reward:.2f}")
+        print(f"Test episode finished")
+        print(f"Steps taken: {steps}")
+        print(f"Total reward ({stock_ticker}): {total_reward:.2f}")
 
-    env.close()
+        env.close()
 
 if __name__ == "__main__":
-    test()
+    stock_tickers = [
+        'AAPL',
+        'NVDA',
+        'MSFT',
+        'TSLA',
+        'GOOGL',
+    ]
+    test(stock_tickers)

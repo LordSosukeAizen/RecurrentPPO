@@ -56,7 +56,7 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
 
 
 
-def collect_rollout(env, policy_net, value_net, rollout_len, device):
+def collect_rollout(env, policy_net, value_net, rollout_len, device, detach_len=5):
     
     buffer = RolloutBuffer()
 
@@ -70,7 +70,7 @@ def collect_rollout(env, policy_net, value_net, rollout_len, device):
     if DEBUG:
         print('sequence length: ', rollout_len)
     
-    for _ in range(rollout_len):
+    for step in range(rollout_len):
         obs_seq = obs.view(1, 1, -1)  # (T=1, B=1, obs_dim)
 
         probs, h_next = policy_net(obs_seq, h)
@@ -95,8 +95,12 @@ def collect_rollout(env, policy_net, value_net, rollout_len, device):
         buffer.hiddens.append(h)
 
         obs = torch.tensor(next_obs, dtype=torch.float32, device=device)
-        h = h_next.detach() 
-
+        
+        if (step + 1) % detach_len:
+            h = h_next.detach() 
+        else:
+            h = h_next
+        
         if done:
             break
 
@@ -230,9 +234,6 @@ if __name__ == "__main__":
         'NVDA',
         'MSFT',
         'TSLA',
-        'CETX',
-        'BNAI',
-        'COKE'
     ]
     
   
