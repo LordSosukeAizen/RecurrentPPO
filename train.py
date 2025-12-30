@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch.distributions import Categorical
@@ -7,6 +8,7 @@ from stockenv import StockEnv
 RPOPATH = "recurrent_po.pth"
 VALUEPATH = "value.pth"
 
+@dataclass
 class RolloutBuffer:
     def __init__(self):
         self.obs = []
@@ -35,7 +37,7 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
         not_done = 1.0 - dones[t].float()
         delta = rewards[t] + gamma * values[t + 1] * not_done - values[t]
         gae = delta + gamma * lam * not_done * gae
-        advantages[t] = gae
+        advantages[t] = gae[-1]
 
     returns = advantages + values[:-1]
     return advantages, returns
@@ -43,6 +45,7 @@ def compute_gae(rewards, values, dones, gamma=0.99, lam=0.95):
 
 
 def collect_rollout(env, policy_net, value_net, rollout_len, device):
+    
     buffer = RolloutBuffer()
 
     obs, _ = env.reset()
@@ -158,6 +161,7 @@ def train(num_episodes=500, save=False):
         input_dim=2,
         hidden_dim=64,
         num_actions=3,
+        num_layers=2,
     ).to(device)
 
     value_net = DVN(hidden_dim=64).to(device)

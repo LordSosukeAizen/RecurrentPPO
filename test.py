@@ -7,6 +7,7 @@ def load_model(device):
         input_dim=2,
         hidden_dim=64,
         num_actions=3,
+        num_layers=2,
     ).to(device)
 
     value_net = DVN(hidden_dim=64).to(device)
@@ -61,7 +62,7 @@ def test():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     env = StockEnv(
-        ticker="AAPL",
+        ticker="TSLA",
         start_date="2024-01-01",
         end_date="2025-01-01",
         render_mode="human",  # set None for headless
