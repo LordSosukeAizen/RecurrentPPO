@@ -42,7 +42,6 @@ def run_episode(env, policy_net, device, render=False):
         probs, h_next = policy_net(obs_seq, h)
         probs = probs.squeeze(0).squeeze(0)
 
-        # 🔵 Greedy action (no sampling)
         action = torch.argmax(probs).item()
 
         obs, reward, done, _, _ = env.step(action)
